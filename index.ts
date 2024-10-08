@@ -1,8 +1,7 @@
 import { error } from "console";
 import fs from "fs";
-import path from "path";
 import http from "http";
-import ulr from "url";
+import * as url from "url";
 
 //Blocking synchronius code
 // const test: string = fs.readFileSync("./txt/read-this.txt", "utf-8");
@@ -37,22 +36,111 @@ import ulr from "url";
 
 //http server
 
-const data = fs.readFileSync(`./dev-data/data.json`);
+interface IProduct {
+	id: number;
+	productName: string;
+	image: string;
+	from: string;
+	nutrients: string;
+	quantity: string;
+	price: string;
+	organic: boolean;
+	description: string;
+}
+
+function buildProductTemplate(template: string, data: IProduct): string {
+	let newTemplate = template.replace(/{%IMAGE%}/g, data.image);
+	newTemplate = newTemplate.replace(/{%PRODUCT_NAME%}/g, data.productName);
+	newTemplate = newTemplate.replace(/{%FROM%}/g, data.from);
+	newTemplate = newTemplate.replace(/{%NUTRIENTS%}/g, data.nutrients);
+	newTemplate = newTemplate.replace(/{%DESCRIPTION%}/g, data.description);
+	newTemplate = newTemplate.replace(/{%QUANTITY%}/g, data.quantity);
+	newTemplate = newTemplate.replace(/{%PRICE%}/g, data.price);
+	newTemplate = newTemplate.replace(/{%ID%}/g, `${data.id}`);
+
+	if (data.organic) {
+		newTemplate = newTemplate.replace(
+			/{%IS_ORGANIC%}/g,
+			"product__organic--true",
+		);
+		newTemplate = newTemplate.replace(/{%IS_ORGANIC_WORD%}/g, "Organic!");
+	} else {
+		newTemplate = newTemplate.replace(/{%IS_ORGANIC_WORD%}/g, "");
+		newTemplate = newTemplate.replace(/{%IS_ORGANIC%}/g, "");
+	}
+
+	return newTemplate;
+}
+
+function buildOverviewTemplate(
+	mainTemplate: string,
+	productTemplate: string,
+): string {
+	const productsTemplates = data.map((product) =>
+		buildProductTemplate(productTemplate, product),
+	);
+	return mainTemplate.replace(/{%PRODUCTS%}/g, productsTemplates.join(""));
+}
+
+const dataFile = fs.readFileSync(`./dev-data/data.json`, "utf-8");
+
+const data: IProduct[] = JSON.parse(dataFile);
+const overviewTemp = fs.readFileSync(
+	`./templates/overview-template.html`,
+	"utf-8",
+);
+const productCardTemp = fs.readFileSync(
+	`./templates/product-card-template.html`,
+	"utf-8",
+);
+const productTemp = fs.readFileSync(
+	`./templates/product-template.html`,
+	"utf-8",
+);
 
 const server = http.createServer((request, result) => {
-	const urlPath = request.url;
+	const { pathname, query } = url.parse(request.url as string, true);
 
-	switch (urlPath) {
+	switch (pathname) {
 		case "/overview": {
-			result.end('"Overwiew content"');
+			const newOverviewTemplate = buildOverviewTemplate(
+				overviewTemp,
+				productCardTemp,
+			);
+
+			result.writeHead(200, "text/HTML");
+			result.end(newOverviewTemplate);
+			break;
+		}
+		case "/products": {
+			if (query["id"] && data[+query["id"]]) {
+				const newProductTemplate = buildProductTemplate(
+					productTemp,
+					data[+query["id"]],
+				);
+
+				result.writeHead(200, "text/HTML");
+				result.end(newProductTemplate);
+			} else {
+				result.writeHead(404, "Server error: data not found", {
+					"Content-type": "text/html",
+				});
+				result.end("<h1>Data error</h1>");
+			}
+			break;
+		}
+		case "/": {
+			const newOverviewTemplate = buildOverviewTemplate(
+				overviewTemp,
+				productCardTemp,
+			);
+
+			result.writeHead(200, "text/HTML");
+			result.end(newOverviewTemplate);
 			break;
 		}
 		case "/admin": {
 			result.end('"Admin panel');
-			break;
-		}
-		case "/": {
-			result.end('"Main page"');
 			break;
 		}
 		case "/api": {
